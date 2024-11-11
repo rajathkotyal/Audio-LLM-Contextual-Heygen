@@ -8,13 +8,17 @@ System Architecture :
 Heygen Interactive Avatar for Zoom calls : 
 - Integrating this service/concept could lead to increased performance, and a fair cost reduction in certain scenarios.
 
-Prediction Service : 
-- At every query received, it caches the most related embedding chunks in a redis DB using an adaptive caching mechanism
-- For subsequent queries, it searches the cache for relevant information and responds immediately.
-- Cache is based on Least-Recently-Used mechanism, holds 5 chunks at a time for a given request.
+Prediction Service About : 
+- At every query received, it spawns a seperate go routine to cache the most related embedding chunks in a redis DB using an adaptive caching mechanism
+- For subsequent queries, it searches the cache for relevant information. At every cache miss, it re organizes based on the current query.
+- Cache is based on Least-Recently-Used and Least-Frequently-used (TODO) mechanism, holds 5 chunks at a time for a given request.
+- Infra wise : Cache can be kept closer to the user's proximity and processed within the cluster.
 
-Why? 
-- Can reduce costs drastically by limiting calls to the main LLM model.
-- Queries can be redirected based on similarity scores and relevance to smaller LLM models with the same accuracy.
+why?
+- Can reduce costs drastically by limiting calls to vector DB and possibly the main LLM model.
+- Queries can be redirected based on similarity scores and relevance to smaller LLM models if tested to provide the same accuracy, given the context window.
+
+Additional Feature : 
+- Added referencing from audio data (Transcripts) --> Tested with Ted Talks of famous speakers and it gives 95% accuracy compared to textual content like blog data and other highly structured data. --> Tested using Gemma 1.5 pro
 
 Stretch Goal : Integrate advanced audio codecs like AV1 and reduce bitrate for transmission during network congestions, expected in Zoom calls and provides better user experience.
