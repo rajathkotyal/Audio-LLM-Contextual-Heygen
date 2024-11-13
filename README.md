@@ -1,15 +1,17 @@
 # Audio-LLM-Contextual-Heygen
 
-A query engine to provide streams of LLM generated Text to Audio with extreme contextual awareness of current conversation using smaller LLM's with lower context window and costs
+Heygen Interactive Avatar for Zoom calls : 
+
+A query engine to provide streams of LLM generated Video/Audio to Text, back to Audio with extreme contextual awareness of current conversation using smaller LLM's with lower context window and costs
 
 System Architecture : 
 ![Screenshot 2024-11-11 at 1 52 20 AM](https://github.com/user-attachments/assets/6c37449a-13e3-4583-8776-a4abfa0e6e3d)
 
-Heygen Interactive Avatar for Zoom calls : 
 - Integrating this service/concept could lead to increased performance, and a fair cost reduction in certain scenarios.
 
 Prediction Service About : 
-- At every query received, it spawns a seperate go routine to cache the most related embedding chunks in a redis DB using an adaptive caching mechanism
+- At every query received, it spawns a seperate go routine to store the knowledge acquired in a neo4j DB, to be utilized by other parallel interactive avatars.
+- it also spawns a seperate go routine to cache the most related embedding chunks in a redis DB using an adaptive caching mechanism
 - For subsequent queries, it searches the cache for relevant information. At every cache miss, it re organizes based on the current query.
 - Cache is based on Least-Recently-Used and Least-Frequently-used (TODO) mechanism, holds 5 chunks at a time for a given request.
 - Infra wise : Cache can be kept closer to the user's proximity and processed within the cluster.
