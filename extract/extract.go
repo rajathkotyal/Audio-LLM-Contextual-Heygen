@@ -104,6 +104,30 @@ func FindSimilarEmbedding(query []float32, threshold float32) ([]float32, bool) 
 	return nil, false
 }
 
+func AngularSimilarity(a, b []float32) float32 {
+	if len(a) != len(b) {
+		return 0
+	}
+
+	var dotProduct, normA, normB float32
+	for i := range a {
+		dotProduct += a[i] * b[i]
+		normA += a[i] * a[i]
+		normB += b[i] * b[i]
+	}
+
+	normA = float32(math.Sqrt(float64(normA)))
+	normB = float32(math.Sqrt(float64(normB)))
+
+	if normA == 0 || normB == 0 {
+		return 0
+	}
+
+	cosine := dotProduct / (normA * normB)
+	angle := float32(math.Acos(float64(cosine)))
+	return 1 - angle/math.Pi
+}
+
 func cosineSimilarity(a, b []float32) float32 {
 	if len(a) != len(b) {
 		return 0

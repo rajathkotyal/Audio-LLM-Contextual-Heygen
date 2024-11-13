@@ -19,6 +19,7 @@ import (
 	"github.com/neo4j/neo4j-go-driver/v4/neo4j"
 	"google.golang.org/api/option"
 
+	"Audio-LLM-Contextual-Heygen/audio"
 	"Audio-LLM-Contextual-Heygen/embedstore"
 	"Audio-LLM-Contextual-Heygen/extract"
 )
@@ -510,6 +511,7 @@ func main() {
 
 		s := queryLLMTest(ctx, model, client, llmquery, 300)
 		// s := invokeLLMChain(ctx, model, client, chunks, query)
+		updateGraphDB(query, s)
 		w.Write([]byte(s))
 
 	})
