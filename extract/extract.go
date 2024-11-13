@@ -1,9 +1,11 @@
 package extract
 
 import (
+	"Audio-LLM-Contextual-Heygen/embedstore"
+	"context"
 	"fmt"
 	"log"
-	"lucidsearch/embedstore"
+	"math"
 	"net/http"
 	"regexp"
 	"strings"
@@ -11,20 +13,17 @@ import (
 
 	"github.com/tmc/langchaingo/schema"
 
+	"encoding/base64"
+
 	"github.com/PuerkitoBio/goquery"
 	readability "github.com/go-shiori/go-readability"
+	"github.com/redis/go-redis/v9"
 	"github.com/texttheater/golang-levenshtein/levenshtein"
-	"encoding/base64"
-    "google.golang.org/api/option"
-    texttospeech "cloud.google.com/go/texttospeech/apiv1"
-    texttospeechpb "google.golang.org/genproto/googleapis/cloud/texttospeech/v1"
-    "github.com/gorilla/websocket"
-    "github.com/redis/go-redis/v9"
 )
 
 const (
-	googleSearchURL = "https://www.googleapis.com/customsearch/v1"
-	geminiAPIURL    = "https://api.gemini.com/v1/embedding"
+	googleSearchURL   = "https://www.googleapis.com/customsearch/v1"
+	geminiAPIURL      = "https://api.gemini.com/v1/embedding"
 	RedisAddr         = "localhost:6379"
 	RedisPassword     = ""
 	RedisDB           = 0
@@ -34,9 +33,9 @@ const (
 
 func init() {
 	redisClient = redis.NewClient(&redis.Options{
-			Addr:     RedisAddr,
-			Password: RedisPassword,
-			DB:       RedisDB,
+		Addr:     RedisAddr,
+		Password: RedisPassword,
+		DB:       RedisDB,
 	})
 }
 
@@ -45,23 +44,87 @@ func CacheEmbedding(embedding []float32) error {
 	ctx := context.Background()
 	// Redis sorted set --> store embeddings with timestamps
 	member := &redis.Z{
-			Score:  float64(time.Now().UnixNano()),
-			Member: base64.StdEncoding.EncodeToString(embedding), 
+		Score:  float64(time.Now().UnixNano()),
+		Member: base64.StdEncoding.EncodeToString(embedding),
 	}
 
 	err = redisClient.ZAdd(ctx, EmbeddingCacheKey, *member).Err()
 	if err != nil {
-			return fmt.Errorf("failed to add embedding to cache: %w", err)
+		return fmt.Errorf("failed to add embedding to cache: %w", err)
 	}
 
 	err = redisClient.ZRemRangeByRank(ctx, EmbeddingCacheKey, 0, -CacheSize-1).Err()
 	if err != nil {
-			return fmt.Errorf("failed to trim embedding cache: %w", err)
+		return fmt.Errorf("failed to trim embedding cache: %w", err)
 	}
 
 	return nil
 }
 
+func GetCachedEmbeddings(ctx context.Context) ([][]float32, error) {
+
+	embeddings, err := redisClient.ZRange(ctx, EmbeddingCacheKey, 0, -1).Result()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get cached embeddings: %w", err)
+	}
+
+	var result [][]float32
+	for _, encodedEmbedding := range embeddings {
+		embeddingBytes, err := base64.StdEncoding.DecodeString(encodedEmbedding)
+		if err != nil {
+			continue
+		}
+
+		// Convert bytes back to []float32
+		embedding := make([]float32, len(embeddingBytes)/4)
+		for i := 0; i < len(embeddingBytes); i += 4 {
+			bits := uint32(embeddingBytes[i]) | uint32(embeddingBytes[i+1])<<8 |
+				uint32(embeddingBytes[i+2])<<16 | uint32(embeddingBytes[i+3])<<24
+			embedding[i/4] = math.Float32frombits(bits)
+		}
+		result = append(result, embedding)
+	}
+
+	return result, nil
+}
+
+func FindSimilarEmbedding(query []float32, threshold float32) ([]float32, bool) {
+	ctx := context.Background()
+	cachedEmbeddings, err := GetCachedEmbeddings(ctx)
+	if err != nil {
+		return nil, false
+	}
+
+	for _, cached := range cachedEmbeddings {
+		similarity := cosineSimilarity(query, cached)
+		if similarity > threshold {
+			return cached, true
+		}
+	}
+	return nil, false
+}
+
+func cosineSimilarity(a, b []float32) float32 {
+	if len(a) != len(b) {
+		return 0
+	}
+
+	var dotProduct float32
+	var normA float32
+	var normB float32
+
+	for i := 0; i < len(a); i++ {
+		dotProduct += a[i] * b[i]
+		normA += a[i] * a[i]
+		normB += b[i] * b[i]
+	}
+
+	if normA == 0 || normB == 0 {
+		return 0
+	}
+
+	return dotProduct / (float32(math.Sqrt(float64(normA))) * float32(math.Sqrt(float64(normB))))
+}
 
 func Scrape(result embedstore.Result, tedTalks []TEDTalk) (string, error) {
 	if result.Link == "" {
@@ -291,7 +354,6 @@ func scrapeAndParse(url string) (schema.Document, error) {
 	// if err != nil {
 	// 	return schema.Document{}, err
 	// }
-
 
 	article, err := readability.FromURL(url, 10*time.Second)
 	if err != nil {

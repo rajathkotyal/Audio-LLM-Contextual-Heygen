@@ -1,18 +1,18 @@
 package embedstore
 
 import (
+	"Audio-LLM-Contextual-Heygen/extract"
 	"context"
 	"fmt"
-	"log"
-	"strings"
-	"time"
-	"unicode/utf8"
-
 	"github.com/google/generative-ai-go/genai"
 	"github.com/google/uuid"
 	pb "github.com/qdrant/go-client/qdrant"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"log"
+	"strings"
+	"time"
+	"unicode/utf8"
 )
 
 func StoreInQdrant(title, link string, embedding []float32, chunkStr string) {
@@ -67,12 +67,11 @@ var (
 
 func init() {
 	redisClient = redis.NewClient(&redis.Options{
-			Addr:     RedisAddr,
-			Password: RedisPassword,
-			DB:       RedisDB,
+		Addr:     RedisAddr,
+		Password: RedisPassword,
+		DB:       RedisDB,
 	})
 }
-
 
 func SetupQdrantCollection(d int) {
 	conn, err := grpc.Dial("localhost:6334", grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -292,7 +291,7 @@ func SanitizeUTF8(input string) string {
 		if r == utf8.RuneError {
 			_, size := utf8.DecodeRuneInString(input[i:])
 			if size == 1 {
-				continue 
+				continue
 			}
 		}
 		v = append(v, r)
@@ -342,7 +341,7 @@ func GetGeminiEmbedding(ctx context.Context, client *genai.Client, content, mode
 		}
 		if res.Embedding != nil && res.Embedding.Values != nil && chunk != "" {
 			StoreInQdrant(result.Title, result.Link, res.Embedding.Values, chunk)
-			
+
 			processedChunks++
 			totalChunks++
 		}

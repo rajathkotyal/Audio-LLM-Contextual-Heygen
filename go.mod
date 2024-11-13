@@ -1,4 +1,4 @@
-module lucidsearch
+module Audio-LLM-Contextual-Heygen
 
 go 1.22.0
 
@@ -36,6 +36,8 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.2 // indirect
 	github.com/googleapis/gax-go/v2 v2.12.4 // indirect
+	github.com/gorilla/websocket v1.5.3 // indirect
+	github.com/neo4j/neo4j-go-driver/v4 v4.4.7 // indirect
 	github.com/pkoukk/tiktoken-go v0.1.6 // indirect
 	github.com/samber/lo v1.39.0 // indirect
 	github.com/texttheater/golang-levenshtein/levenshtein v0.0.0-20200805054039-cae8b0eaed6c // indirect

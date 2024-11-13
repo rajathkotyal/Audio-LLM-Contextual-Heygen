@@ -1,13 +1,14 @@
-import(
-	"github.com/PuerkitoBio/goquery"
-	readability "github.com/go-shiori/go-readability"
-	"github.com/texttheater/golang-levenshtein/levenshtein"
-	"encoding/base64"
-    "google.golang.org/api/option"
-    texttospeech "cloud.google.com/go/texttospeech/apiv1"
-    texttospeechpb "google.golang.org/genproto/googleapis/cloud/texttospeech/v1"
-    "github.com/gorilla/websocket"
-    "github.com/redis/go-redis/v9"
+package audio
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	texttospeech "cloud.google.com/go/texttospeech/apiv1"
+	"github.com/gorilla/websocket"
+	"google.golang.org/api/option"
+	texttospeechpb "google.golang.org/genproto/googleapis/cloud/texttospeech/v1"
 )
 
 const (
@@ -21,19 +22,19 @@ func HandleUserInteraction(sessionID string, userInput string, wsConn *websocket
 
 	immediateResponse, err = GenerateResponse(userInput)
 	if err != nil {
-			log.Println("Error generating response:", err)
+		log.Println("Error generating response:", err)
 	}
 
 	audioData, err := ConvertTextToSpeech(immediateResponse)
 	if err != nil {
-			log.Println("Error converting text to speech:", err)
-			return err
+		log.Println("Error converting text to speech:", err)
+		return err
 	}
 
 	err = StreamAudio(wsConn, audioData)
 	if err != nil {
-			log.Println("Error streaming audio:", err)
-			return err
+		log.Println("Error streaming audio:", err)
+		return err
 	}
 	return nil
 }
@@ -42,26 +43,26 @@ func ConvertTextToSpeech(text string) ([]byte, error) {
 	ctx := context.Background()
 	client, err := texttospeech.NewClient(ctx, option.WithAPIKey(GoogleCloudAPIKey))
 	if err != nil {
-			return nil, fmt.Errorf("failed to create TTS client: %w", err)
+		return nil, fmt.Errorf("failed to create TTS client: %w", err)
 	}
 	defer client.Close()
 
 	req := &texttospeechpb.SynthesizeSpeechRequest{
-			Input: &texttospeechpb.SynthesisInput{
-					InputSource: &texttospeechpb.SynthesisInput_Text{Text: text},
-			},
-			Voice: &texttospeechpb.VoiceSelectionParams{
-					LanguageCode: "en-US",
-					SsmlGender:   texttospeechpb.SsmlVoiceGender_NEUTRAL,
-			},
-			AudioConfig: &texttospeechpb.AudioConfig{
-					AudioEncoding: texttospeechpb.AudioEncoding_OGG_OPUS,
-			},
+		Input: &texttospeechpb.SynthesisInput{
+			InputSource: &texttospeechpb.SynthesisInput_Text{Text: text},
+		},
+		Voice: &texttospeechpb.VoiceSelectionParams{
+			LanguageCode: "en-US",
+			SsmlGender:   texttospeechpb.SsmlVoiceGender_NEUTRAL,
+		},
+		AudioConfig: &texttospeechpb.AudioConfig{
+			AudioEncoding: texttospeechpb.AudioEncoding_OGG_OPUS,
+		},
 	}
 
 	resp, err := client.SynthesizeSpeech(ctx, req)
 	if err != nil {
-			return nil, fmt.Errorf("failed to synthesize speech: %w", err)
+		return nil, fmt.Errorf("failed to synthesize speech: %w", err)
 	}
 
 	return resp.AudioContent, nil
@@ -71,7 +72,7 @@ func StreamAudio(conn *websocket.Conn, audioData []byte) error {
 	// binary message
 	err := conn.WriteMessage(websocket.BinaryMessage, audioData)
 	if err != nil {
-			return fmt.Errorf("failed to send audio data: %w", err)
+		return fmt.Errorf("failed to send audio data: %w", err)
 	}
 	return nil
 }

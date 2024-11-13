@@ -4,20 +4,23 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"strings"
 	"sync"
 
 	"github.com/google/generative-ai-go/genai"
-
-	"lucidsearch/embedstore"
-	"lucidsearch/extract"
-
+	"github.com/gorilla/websocket"
+	"github.com/neo4j/neo4j-go-driver/v4/neo4j"
 	"google.golang.org/api/option"
+
+	"Audio-LLM-Contextual-Heygen/embedstore"
+	"Audio-LLM-Contextual-Heygen/extract"
 )
 
 const (
@@ -41,6 +44,9 @@ var (
 	apiKey    string
 	cxID      string
 	g_Api_Key string
+	neo4jURI  string
+	neo4jUser string
+	neo4jPass string
 )
 
 func loadEnvVars() {
@@ -58,7 +64,141 @@ func loadEnvVars() {
 	if g_Api_Key == "" {
 		fmt.Println("Warning: G_API_KEY is not set")
 	}
+
+	neo4jURI = os.Getenv("NEO4J_URI")
+	neo4jUser = os.Getenv("NEO4J_USER")
+	neo4jPass = os.Getenv("NEO4J_PASS")
 }
+
+func handleVideoUpload(w http.ResponseWriter, r *http.Request) {
+	file, _, err := r.FormFile("video")
+	if err != nil {
+		http.Error(w, "Error retrieving the file", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	tempFile, err := os.CreateTemp("", "video-*.mp4")
+	if err != nil {
+		http.Error(w, "Error creating temporary file", http.StatusInternalServerError)
+		return
+	}
+	defer os.Remove(tempFile.Name())
+
+	_, err = io.Copy(tempFile, file)
+	if err != nil {
+		http.Error(w, "Error saving the file", http.StatusInternalServerError)
+		return
+	}
+
+	extractedText, err := extractTextFromVideo(tempFile.Name())
+	if err != nil {
+		http.Error(w, "Error extracting text from video", http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]string{"extractedText": extractedText})
+}
+
+func extractTextFromVideo(videoPath string) (string, error) {
+	cmd := exec.Command("ffmpeg", "-i", videoPath, "-vf", "subtitles=subtitles.srt", "-f", "rawvideo", "-")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("ffmpeg command failed: %v", err)
+	}
+	return string(output), nil
+}
+
+func updateGraphDB(query, answer string) error {
+	driver, err := neo4j.NewDriver(neo4jURI, neo4j.BasicAuth(neo4jUser, neo4jPass, ""))
+	if err != nil {
+		return fmt.Errorf("failed to create driver: %w", err)
+	}
+	defer driver.Close()
+
+	session := driver.NewSession(neo4j.SessionConfig{})
+	defer session.Close()
+
+	_, err = session.WriteTransaction(func(tx neo4j.Transaction) (interface{}, error) {
+		result, err := tx.Run(
+			"MERGE (q:Query {text: $queryText}) "+
+				"MERGE (a:Answer {text: $answerText}) "+
+				"MERGE (q)-[:HAS_ANSWER]->(a)",
+			map[string]interface{}{
+				"queryText":  query,
+				"answerText": answer,
+			})
+		if err != nil {
+			return nil, err
+		}
+		return result.Consume()
+	})
+
+	return err
+}
+
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
+}
+
+func handleWebSocket(w http.ResponseWriter, r *http.Request) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println("Error upgrading to WebSocket:", err)
+		return
+	}
+	defer conn.Close()
+
+	for {
+		messageType, p, err := conn.ReadMessage()
+		if err != nil {
+			log.Println("Error reading message:", err)
+			return
+		}
+
+		if messageType == websocket.TextMessage {
+			query := string(p)
+			response, err := handleUserInteraction(query)
+			if err != nil {
+				log.Println("Error handling user interaction:", err)
+				continue
+			}
+
+			audioData, err := audio.ConvertTextToSpeech(response)
+			if err != nil {
+				log.Println("Error converting text to speech:", err)
+				continue
+			}
+
+			err = conn.WriteMessage(websocket.BinaryMessage, audioData)
+			if err != nil {
+				log.Println("Error writing audio data:", err)
+				return
+			}
+		}
+	}
+}
+
+func handleUserInteraction(query string) (string, error) {
+	ctx := context.Background()
+	client, err := genai.NewClient(ctx, option.WithAPIKey(g_Api_Key))
+	if err != nil {
+		return "", err
+	}
+	defer client.Close()
+
+	model := client.GenerativeModel("gemini-1.5-flash")
+	response, err := queryLLM(ctx, model, client, query, 300)
+	if err != nil {
+		return "", err
+	}
+
+	return formatResponse(response), nil
+}
+
+var totalChunks = 0
 
 func GoogleSearch(query string, maxResults int, resultsCh chan<- embedstore.Result, linkSet map[string]struct{}) {
 	u, err := url.Parse(googleSearchURL)
@@ -235,8 +375,6 @@ func formatResponse(resp *genai.GenerateContentResponse) string {
 	sb.WriteString("---\n")
 	return sb.String()
 }
-
-var totalChunks = 0
 
 func main() {
 
