@@ -1,6 +1,6 @@
-# Audio-LLM-Contextual-Heygen
+# Audio-LLM-Contextual
 
-Heygen Interactive Avatar for Zoom calls : 
+Interactive Avatar for Zoom calls : 
 
 A query engine to provide streams of LLM generated Video/Audio to Text, back to Audio with extreme contextual awareness of current conversation using smaller LLM's with lower context window and costs
 
