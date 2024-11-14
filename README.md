@@ -1,4 +1,4 @@
-# Audio-LLM-Contextual
+# Audio-LLM-Contextual - Note : Not part of Heygen the organization. Just a proof of concept to the idea.
 
 Interactive Avatar for Zoom calls : 
 
